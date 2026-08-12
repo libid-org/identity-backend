@@ -1,0 +1,68 @@
+[package]
+name = "identity-backend"
+version = "0.1.0"
+edition = "2021"
+# Inherited from libid-rs, and it is not arbitrary: the `mpz` MPC dependency
+# (via tlsn) uses `cfg_select!`, unstable before 1.94; the AWS SDK crates
+# (via libid-signer) declare 1.94.1.
+rust-version = "1.94.1"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/libid-org/identity-backend"
+description = "Minimal identity/handles backend: OAuth handle-claim flow producing bind-ready MPC-TLS proofs. The UI submits the bind on-chain itself."
+publish = false
+
+[dependencies]
+# ── libid-rs shared crates ──────────────────────────────────────────────
+# All five pinned to the same release tag of the git repo. Four of them are
+# also on crates.io, but libid-tlsn is git-only (its upstream `tlsn` dep is
+# not on crates.io) and its API exposes libid-transcript types — mixing the
+# registry copies with the git copy puts two incompatible versions of the
+# same types in the graph. One source, one tag, until libid-tlsn can be
+# published.
+libid-attestations = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
+libid-crypto = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
+libid-signer = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
+libid-tlsn = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
+libid-transcript = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
+# Upstream TLSNotary, the same pin libid-rs uses. Needed directly for the
+# attestation/presentation types (`Attestation`, `CryptoProvider`, `Secrets`).
+tlsn = { git = "https://github.com/tlsnotary/tlsn", rev = "040c6881f3ec65ea042de134a0586b23cf382443" }
+
+# ── proof ABI types ─────────────────────────────────────────────────────
+alloy-primitives = { version = "1", features = ["serde"] }
+alloy-sol-types = "1"
+
+# ── HTTP server / client ────────────────────────────────────────────────
+axum = "0.8"
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+# ── everything else ─────────────────────────────────────────────────────
+base64 = "0.22"
+clap = { version = "4", features = ["derive", "env"] }
+hex = "0.4"
+k256 = { version = "0.13", features = ["ecdsa"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "io-util",
+    "sync",
+    "time",
+    "signal",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

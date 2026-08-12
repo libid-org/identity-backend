@@ -1,0 +1,40 @@
+//! Binary entrypoint: parse config, build state, serve.
+
+use clap::Parser;
+use tracing::info;
+
+use identity_backend::{
+    build_state,
+    config::Config,
+    routes,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
+    let cfg = Config::parse();
+    let allowed_origins = cfg.allowed_origin_patterns();
+    let addr = format!("{}:{}", cfg.host, cfg.port);
+
+    let state = build_state(&cfg).await?;
+    let app = routes::build_router()
+        .with_state(state)
+        .layer(routes::cors_layer(allowed_origins));
+
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    info!("identity-backend listening on {}", listener.local_addr()?);
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+            info!("shutting down");
+        })
+        .await?;
+    Ok(())
+}

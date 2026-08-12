@@ -1,0 +1,103 @@
+name: Release
+
+# Publishing a GitHub Release tagged `v<version>` runs the full checks and
+# then builds + pushes the container image to
+#   ghcr.io/libid-org/identity-backend:<version>
+#   ghcr.io/libid-org/identity-backend:latest
+# using the built-in GITHUB_TOKEN — no long-lived registry credential.
+#
+# Every third-party action is pinned by commit SHA, with the tag in a
+# comment, so a moved tag cannot change what executes.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  RUSTFLAGS: "-D warnings"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_VERSION: 1.97.1
+  NIGHTLY: nightly-2026-08-10
+  IMAGE: ghcr.io/libid-org/identity-backend
+
+jobs:
+  # The same gate as CI: nothing ships from a tree that does not pass the
+  # checks a PR would have to pass.
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb # nightly
+        with:
+          toolchain: ${{ env.NIGHTLY }}
+          components: rustfmt
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Formatting (nightly rustfmt)
+        run: cargo +"$NIGHTLY" fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Tests
+        run: cargo test --all
+
+  docker:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [checks]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The tag is a pointer, never a source: it must name a strict SemVer
+      # version. Read from env, not `${{ }}`-interpolated into the script —
+      # git permits shell metacharacters in tag names.
+      - name: Derive version from the release tag
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::release tag '${TAG}' is not vX.Y.Z"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
