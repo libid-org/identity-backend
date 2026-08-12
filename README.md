@@ -26,18 +26,48 @@ Built on the [libid-rs](https://github.com/libid-org/libid-rs) crates
    independently re-verifies everything the notary attested — TLS handshake
    parameters, domain, endpoint, freshness, Merkle leaves and root, and the
    notary signature (which is domain-separated by chain id and verifier
-   contract) — builds the Merkle paths for the domain / endpoint / username
-   / user-id leaves, and countersigns the result. Two independent parties
-   have now attested; forging a proof requires both to collude.
+   contract) — against its own view of the session, and builds the Merkle
+   paths for the domain / endpoint / username / user-id leaves. A proof that
+   fails any of those checks is never handed out.
 4. The UI polls `GET /auth/github/result/{challenge}` until it flips from
    `202` to `200`, takes the `registration_proof` from the payload, and
    submits the bind transaction on-chain from the user's wallet.
 
-Proofs are bound to the `link_wallet` from step 1: the backend
-countersignature commits to it, and the verifier contract refuses the proof
-from any other wallet. That is also why the result endpoint needs no
-authentication — the challenge id is an unguessable 32-byte secret, and the
-proof it yields is unusable by anyone but `link_wallet`.
+## Trust model
+
+**The notary is the only trust root.** This server signs nothing and holds no
+key of its own — the single signature in a proof is the notary's. Its own
+re-verification in step 3 is a correctness gate, not a second attestation: it
+turns a broken or lying notary into a failed claim here instead of a revert
+on-chain.
+
+Until recently the server also countersigned `(userAddress, walletAddress,
+transcriptRoot, timestamp)` with a key of its own, and the verifier contract
+checked it, which read as "forging a proof needs two keys". It did not. The
+backend *is* that signer, so a compromised backend signed whichever pairing
+it liked — and it holds the user's OAuth access token and drives the MPC-TLS
+session besides, so it could equally obtain a *genuine* transcript naming its
+own wallet. The second signature never constrained the party it appeared to
+constrain, while costing a key, an IAM grant and a rotation story.
+
+What it did do is stop a **third party replaying** somebody else's proof. The
+verifier is a view and proofs arrive as public calldata, so a successful claim
+is readable on-chain; without the countersignature an attacker can copy one,
+point `walletAddress` at their own address, submit it themselves so
+`IdentityNames`' `msg.sender` check passes, and take the handle. **That hole
+is open**, knowingly: it is a protocol problem, not a signature problem, and
+the fix belongs in the notarised data. The notary already commits the request
+path as an `endpoint:` Merkle leaf, so proving `/user?bind=0xWALLET` puts the
+wallet inside the transcript and the verifier can check that leaf the way it
+already checks the handle. Moving GitHub proving into the browser, as X and
+Google already do, removes this server from the trust model altogether — the
+OAuth token would never reach a server at all.
+
+The `link_wallet` from step 1 therefore still travels in the proof as
+`walletAddress`, and the verifier contract still refuses a bind from any other
+wallet, but nothing signs that pairing today. Treat the challenge id as the
+secret it is: an unguessable 32 bytes, which is why the result endpoint needs
+no authentication.
 
 ## Endpoints
 
@@ -67,10 +97,15 @@ All settings come from environment variables (or the matching `--flag`).
 | `NOTARY_ADDRESS` | *(required)* | The notary's Ethereum address. Every proof's notary signature must recover to it. |
 | `CHAIN_ID` | *(required)* | EVM chain id of the target deployment; part of the notary digest's domain separator. |
 | `VERIFIER_CONTRACT_ADDRESS` | *(required)* | **Read carefully — this is the most commonly misconfigured value.** The address of the contract that verifies the notary signature on-chain: for the naming deployment that is **`GitHubIdentityVerifier`**, *not* `IdentityNames`. The notary digest is domain-separated by `(CHAIN_ID, VERIFIER_CONTRACT_ADDRESS)`; point this at the wrong contract and every bind reverts with a notary-signature failure. (dyaka called this same value `REGISTRY_CONTRACT_ADDRESS`, which is how the confusion started.) |
-| `BACKEND_SIGNING_KEY` | *(required)* | Countersigning key: a raw hex secp256k1 private key, or an AWS KMS key as `kms:<key-id>` (alias / ARN / UUID; the `kms:` prefix is optional — any value containing a non-hex character is treated as a KMS identifier). Region and credentials come from the ambient AWS config. The verifier contract must trust the corresponding address. |
 | `GH_OAUTH_CLIENT_ID` | *(required)* | GitHub OAuth App client id (a plain read-only OAuth App; no GitHub App needed). |
 | `GH_OAUTH_CLIENT_SECRET` | *(required)* | GitHub OAuth App client secret. |
 | `CHALLENGE_TTL_SECS` | `300` | Lifetime of a challenge and of its finished result. |
+
+There is no signing key to configure, and no AWS/KMS grant to provision: the
+server signs nothing (see [Trust model](#trust-model)). `BACKEND_SIGNING_KEY`
+is gone — a deployment that still sets it is not broken, but the value is
+ignored, so drop it from your secrets. The only secret this server needs is
+`GH_OAUTH_CLIENT_SECRET`.
 
 ### Note on Google binds
 
@@ -91,7 +126,6 @@ docker run --rm -p 8722:8722 \
   -e NOTARY_ADDRESS=0x... \
   -e CHAIN_ID=1 \
   -e VERIFIER_CONTRACT_ADDRESS=0x...   # GitHubIdentityVerifier, see above \
-  -e BACKEND_SIGNING_KEY=kms:alias/identity-backend \
   -e GH_OAUTH_CLIENT_ID=... \
   -e GH_OAUTH_CLIENT_SECRET=... \
   ghcr.io/libid-org/identity-backend:latest

@@ -3,8 +3,7 @@ name = "identity-backend"
 version = "0.1.0"
 edition = "2021"
 # Inherited from libid-rs, and it is not arbitrary: the `mpz` MPC dependency
-# (via tlsn) uses `cfg_select!`, unstable before 1.94; the AWS SDK crates
-# (via libid-signer) declare 1.94.1.
+# (via tlsn) uses `cfg_select!`, unstable before 1.94.
 rust-version = "1.94.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/libid-org/identity-backend"
@@ -13,15 +12,18 @@ publish = false
 
 [dependencies]
 # ── libid-rs shared crates ──────────────────────────────────────────────
-# All five pinned to the same release tag of the git repo. Four of them are
+# All four pinned to the same release tag of the git repo. Three of them are
 # also on crates.io, but libid-tlsn is git-only (its upstream `tlsn` dep is
 # not on crates.io) and its API exposes libid-transcript types — mixing the
 # registry copies with the git copy puts two incompatible versions of the
 # same types in the graph. One source, one tag, until libid-tlsn can be
 # published.
+#
+# libid-signer is deliberately absent, and with it the AWS SDK: this service
+# holds no signing key. Nothing else here needs it — the notary digest is
+# only ever verified, never signed.
 libid-attestations = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
 libid-crypto = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
-libid-signer = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
 libid-tlsn = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
 libid-transcript = { git = "https://github.com/libid-org/libid-rs", tag = "v0.1.0" }
 # Upstream TLSNotary, the same pin libid-rs uses. Needed directly for the

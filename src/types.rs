@@ -1,16 +1,20 @@
 //! Wire types: challenge request/response and the bind-ready proof bundle.
 //!
-//! The proof shapes mirror dyaka's byte-for-byte (same field names, same
-//! alloy serde encodings), so a client — or dyaka's e2e test — that consumed
-//! the dyaka backend's `/auth/github/result/{challenge}` payload consumes
-//! this one unchanged.
+//! The proof shapes still mirror dyaka's field-for-field and use the same
+//! alloy serde encodings, with one deliberate difference: the backend
+//! countersignature is gone, so the payload no longer carries `backend_sig`
+//! and `tls_proof` no longer carries `backendSignature`. That drops one
+//! `bytes` member from the head of the ABI tuple, so a client built for the
+//! old shape does not encode a valid call — it has to drop the field in step
+//! with `GitHubIdentityVerifier`, which no longer reads it.
 //!
 //! End-to-end coverage against real GitHub OAuth + a live notary is out of
-//! scope here; dyaka's `tests/src/e2e/identity_bind.rs` exercises exactly
-//! the three endpoints this server exposes (`/auth/github/challenge`,
-//! `/auth/github/callback` via the browser, `/auth/github/result/{id}`)
-//! with these payload shapes, so pointing its `backend_url` at this server
-//! runs it unchanged.
+//! scope here; dyaka's `tests/src/e2e/identity_bind.rs` exercises exactly the
+//! three endpoints this server exposes (`/auth/github/challenge`,
+//! `/auth/github/callback` via the browser, `/auth/github/result/{id}`), so
+//! pointing its `backend_url` here still drives the whole flow — but its
+//! proof deserialization has to lose the countersignature fields first, the
+//! same edit its on-chain encoder needs.
 
 use serde::{
     Deserialize,
@@ -31,10 +35,17 @@ pub struct ChallengeRequest {
     pub pubkey: String,
     /// The wallet (20-byte hex address) the proof is made out to.
     ///
-    /// REQUIRED and load-bearing: the backend countersignature binds this
-    /// address into the digest, and `IdentityNames` refuses a bind whose
-    /// proof names a different (or zero) wallet. A proof without it would be
-    /// unusable, so the request is rejected instead.
+    /// REQUIRED: it travels as the proof's `walletAddress`, and
+    /// `IdentityNames` refuses a bind whose proof names a different (or zero)
+    /// wallet — it must be the caller of the bind transaction. A proof
+    /// without it would be unusable, so the request is rejected instead.
+    ///
+    /// No signature binds it any more (the backend countersignature that used
+    /// to is gone — see the `flow` module docs), so a proof, which is public
+    /// calldata once submitted, can be replayed by a third party who swaps in
+    /// their own wallet. The fix is to bind the wallet into the notarised
+    /// transcript itself; until then this field is a routing instruction, not
+    /// a cryptographic commitment.
     pub link_wallet: String,
 }
 
@@ -54,12 +65,14 @@ pub struct ChallengeResponse {
 #[allow(missing_docs, clippy::too_many_arguments, unused_attributes)]
 mod sol_types {
     alloy_sol_types::sol! {
-        /// The on-chain TLS proof: notary + backend signatures over the
-        /// transcript root, plus the Merkle paths for the revealed leaves.
+        /// The on-chain TLS proof: the notary's signature over the transcript
+        /// root, plus the Merkle paths for the revealed leaves. Field order
+        /// is the ABI — it must stay identical to `FullTlsProof` in
+        /// `GitHubIdentityVerifier.sol`, which no longer carries a
+        /// `backendSignature`.
         #[derive(Debug, serde::Serialize, serde::Deserialize)]
         struct FullTlsProof {
             bytes notarySignature;
-            bytes backendSignature;
             address userAddress;
             address walletAddress;
             bytes32 domainHash;
@@ -94,9 +107,6 @@ pub struct RegistrationProof {
     pub user_id: String,
     /// The full TLS proof struct ready for on-chain verification.
     pub tls_proof: FullTlsProof,
-    /// Backend signature fields (redundant with `tls_proof` for clients that
-    /// only re-verify the countersignature).
-    pub backend_sig: BackendSigFields,
     /// The API domain verified in the TLS proof.
     pub domain: String,
     /// The API endpoint path verified in the TLS proof.
@@ -113,17 +123,6 @@ pub struct RegistrationProof {
     pub user: PlatformUser,
     /// The platform enum value.
     pub platform_enum: Platform,
-}
-
-/// Backend countersignature fields.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BackendSigFields {
-    /// Hex-encoded session address (the user address in the digest).
-    pub user_address: String,
-    /// Unix timestamp from the proof.
-    pub timestamp: u64,
-    /// Hex-encoded 65-byte ECDSA signature (Solidity v-byte 27/28).
-    pub signature: String,
 }
 
 /// Final verification response served by `GET /auth/github/result/{id}`.

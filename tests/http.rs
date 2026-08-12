@@ -37,16 +37,8 @@ use identity_backend::{
     types::ChallengeResponse,
 };
 
-// Canonical anvil key #0. Public test material, not a secret.
-const BACKEND_KEY: &str =
-    "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-
-async fn test_state(ttl_secs: u64, app_url: Option<&str>) -> Arc<AppState> {
-    let signer = libid_signer::SignerSource::from_spec(BACKEND_KEY)
-        .unwrap()
-        .build_managed(None)
-        .await
-        .unwrap();
+// The state carries no signing identity: the service holds no key.
+fn test_state(ttl_secs: u64, app_url: Option<&str>) -> Arc<AppState> {
     Arc::new(AppState {
         runtime: Runtime {
             base_url: "http://127.0.0.1:8722".into(),
@@ -57,7 +49,6 @@ async fn test_state(ttl_secs: u64, app_url: Option<&str>) -> Arc<AppState> {
             verifier_contract: [0x42u8; 20],
             challenge_ttl_secs: ttl_secs,
         },
-        signer,
         github_oauth: identity_backend::oauth::OAuthCredentials {
             client_id: "test-client-id".into(),
             client_secret: "test-client-secret".into(),
@@ -84,7 +75,7 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
 
 #[tokio::test]
 async fn health_is_ok() {
-    let resp = app(test_state(300, None).await)
+    let resp = app(test_state(300, None))
         .oneshot(Request::get("/health").body(Body::empty()).unwrap())
         .await
         .unwrap();
@@ -95,7 +86,7 @@ async fn health_is_ok() {
 
 #[tokio::test]
 async fn challenge_happy_path() {
-    let state = test_state(300, None).await;
+    let state = test_state(300, None);
     let pubkey = valid_pubkey();
     let req = Request::post("/auth/github/challenge")
         .header(header::CONTENT_TYPE, "application/json")
@@ -153,7 +144,7 @@ async fn challenge_happy_path() {
 
 #[tokio::test]
 async fn challenge_rejects_bad_input() {
-    let state = test_state(300, None).await;
+    let state = test_state(300, None);
 
     // Invalid pubkey hex.
     let req = Request::post("/auth/github/challenge")
@@ -213,7 +204,7 @@ async fn challenge_rejects_bad_input() {
 
 #[tokio::test]
 async fn result_states() {
-    let state = test_state(300, None).await;
+    let state = test_state(300, None);
 
     // Unknown challenge → 404.
     let resp = app(Arc::clone(&state))
@@ -251,7 +242,7 @@ async fn result_states() {
 #[tokio::test]
 async fn challenge_ttl_sweep() {
     // ttl 0: everything is expired the moment it exists.
-    let state = test_state(0, None).await;
+    let state = test_state(0, None);
     state
         .create_challenge(
             "old".into(),
@@ -319,7 +310,7 @@ fn pubkey_and_wallet_validation() {
 
 #[tokio::test]
 async fn gmail_relay_serves_csp_locked_forwarder() {
-    let state = test_state(300, Some("https://wallet.example")).await;
+    let state = test_state(300, Some("https://wallet.example"));
     let resp = app(state)
         .oneshot(
             Request::get("/auth/gmail/callback")
@@ -345,7 +336,7 @@ async fn gmail_relay_serves_csp_locked_forwarder() {
 
 #[tokio::test]
 async fn gmail_relay_requires_app_url() {
-    let state = test_state(300, None).await;
+    let state = test_state(300, None);
     let resp = app(state)
         .oneshot(
             Request::get("/auth/gmail/callback")
@@ -359,7 +350,7 @@ async fn gmail_relay_requires_app_url() {
 
 #[tokio::test]
 async fn callback_rejects_unknown_and_replayed_state() {
-    let state = test_state(300, None).await;
+    let state = test_state(300, None);
 
     // Missing state param.
     let resp = app(Arc::clone(&state))

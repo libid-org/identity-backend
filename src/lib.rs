@@ -28,26 +28,12 @@ use state::{
     Runtime,
 };
 
-/// Build the shared [`AppState`] from parsed configuration. Constructs the
-/// signer (a KMS spec performs its AWS calls here, failing at startup with a
-/// clear error rather than on the first proof).
+/// Build the shared [`AppState`] from parsed configuration. Parses the
+/// addresses that must be well-formed for any proof to verify, so a typo
+/// fails at startup rather than on the first claim.
+///
+/// This holds no key material of any kind: the service signs nothing.
 pub async fn build_state(cfg: &config::Config) -> Result<Arc<AppState>> {
-    // Accept both spellings: a bare spec (hex key, or KMS alias/ARN/UUID —
-    // libid-signer classifies by shape) and the explicit `kms:<key-id>`
-    // prefix form.
-    let key_spec = cfg
-        .backend_signing_key
-        .strip_prefix("kms:")
-        .unwrap_or(&cfg.backend_signing_key);
-    let signer = libid_signer::SignerSource::from_spec(key_spec)?
-        .build_managed(None)
-        .await?;
-    tracing::info!(
-        backend = %signer.address(),
-        via = %signer.describe(),
-        "backend signer ready"
-    );
-
     let notary_address = libid_crypto::hex_to_address(&cfg.notary_address)?;
     let verifier_contract = libid_crypto::hex_to_address(&cfg.verifier_contract_address)?;
 
@@ -84,7 +70,6 @@ pub async fn build_state(cfg: &config::Config) -> Result<Arc<AppState>> {
             verifier_contract,
             challenge_ttl_secs: cfg.challenge_ttl_secs,
         },
-        signer,
         github_oauth,
         challenges: tokio::sync::RwLock::new(std::collections::HashMap::new()),
         results: tokio::sync::RwLock::new(std::collections::HashMap::new()),
