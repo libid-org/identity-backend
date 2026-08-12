@@ -1,19 +1,41 @@
 //! The MPC-TLS proving flow: prover session → notary response → independent
-//! verification → Merkle paths → backend countersignature.
+//! verification → Merkle paths → bind-ready proof.
 //!
 //! Ported from dyaka's `RegistrationFlow`, rebuilt on the libid-rs crates and
 //! stripped of everything on-chain: the output is a bind-ready
 //! [`VerifyResponse`] the UI submits itself.
 //!
-//! # Role in the 2-of-2 trust model
+//! # The notary is the only trust root
 //!
-//! This backend is the second independent verifier. It runs the prover side
-//! of MPC-TLS, so it independently holds the full TLS session data. After
-//! receiving the notary's signed attestation it re-checks everything —
-//! attestation validity, handshake parameters, domain, endpoint, timestamp,
-//! Merkle leaves, Merkle root, notary signature — against its own session
-//! view before countersigning. Forging a proof requires collusion between
-//! both the notary and this backend.
+//! This backend runs the prover side of MPC-TLS, so it independently holds
+//! the full TLS session data. After receiving the notary's signed attestation
+//! it re-checks everything — attestation validity, handshake parameters,
+//! domain, endpoint, timestamp, Merkle leaves, Merkle root, notary signature
+//! — against its own session view, and refuses to emit a proof that
+//! disagrees. That check is worth keeping: it turns a broken or lying notary
+//! into a failed claim here instead of a revert on-chain. It is not a second
+//! trust root, and this backend no longer pretends to be one.
+//!
+//! Until this commit it also countersigned `(userAddress, walletAddress,
+//! transcriptRoot, timestamp)` with a key of its own, which read as "forging
+//! a proof needs two keys". It did not. The backend IS that signer, so a
+//! compromised backend signed whichever pairing it liked — and it holds the
+//! user's OAuth access token and drives the MPC-TLS session besides, so it
+//! could equally obtain a GENUINE transcript naming its own wallet. The
+//! second signature never constrained the party it appeared to constrain,
+//! while costing a key, an IAM grant and a rotation story.
+//!
+//! What it did do is stop a THIRD PARTY replaying somebody else's proof: the
+//! verifier is a view and proofs arrive as public calldata, so a successful
+//! claim is readable on-chain, and without the countersignature an attacker
+//! can copy one, point `walletAddress` at themselves and submit it. **That
+//! hole is open as of this commit**, deliberately: it is a protocol problem,
+//! not a signature problem. The fix belongs in the notarised data — the
+//! notary already commits the request path as an `endpoint:` Merkle leaf, so
+//! proving `/user?bind=0xWALLET` puts the wallet inside the transcript and
+//! the verifier can check that leaf the way it already checks the handle.
+//! Moving GitHub proving into the browser, as X and Google already do, would
+//! remove this backend from the trust model altogether.
 //!
 //! # Testability
 //!
@@ -37,10 +59,7 @@ use tokio::io::{
 };
 use tracing::info;
 
-use libid_attestations::{
-    compute_backend_digest,
-    compute_notary_digest,
-};
+use libid_attestations::compute_notary_digest;
 use libid_crypto::{
     build_merkle_tree,
     double_hash_leaf,
@@ -49,7 +68,6 @@ use libid_crypto::{
     pubkey_to_eth_address,
     recover_eth_claim,
 };
-use libid_signer::ManagedSigner;
 use libid_tlsn::{
     ProverResult,
     UserInfoParams,
@@ -74,7 +92,6 @@ use crate::{
         PlatformUser,
     },
     types::{
-        BackendSigFields,
         FullTlsProof,
         RegistrationProof,
         VerifyResponse,
@@ -90,7 +107,7 @@ const USER_AGENT: &str = concat!("identity-backend/", env!("CARGO_PKG_VERSION"))
 const MAX_TIMESTAMP_DRIFT_SECS: u64 = 30;
 
 /// Everything the flow needs besides the socket and the access token.
-pub struct FlowContext<'a> {
+pub struct FlowContext {
     /// The platform being proven.
     pub platform: Platform,
     /// EVM chain id bound into the notary digest.
@@ -99,8 +116,6 @@ pub struct FlowContext<'a> {
     pub verifier_contract: [u8; 20],
     /// Expected notary Ethereum address.
     pub notary_address: [u8; 20],
-    /// Backend countersigning identity.
-    pub signer: &'a ManagedSigner,
 }
 
 /// Run the full proving flow over `socket` (the notary connection).
@@ -112,7 +127,7 @@ pub async fn run<S>(
     access_token: &str,
     pubkey_hex: &str,
     link_wallet: [u8; 20],
-    ctx: &FlowContext<'_>,
+    ctx: &FlowContext,
 ) -> Result<VerifyResponse>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -153,15 +168,11 @@ where
     let presentation =
         build_presentation(prover_result.secrets, &attestation, &provider)?;
 
-    // ── Countersign + assemble ──────────────────────────────────────────
+    // ── Assemble ────────────────────────────────────────────────────────
+    // Nothing is signed here. The proof carries exactly one signature, the
+    // notary's, made over a digest domain-separated by (chain id, verifying
+    // contract); `link_wallet` travels as the proof's `walletAddress`.
     let evm_proof = &notary_resp.evm_proof;
-    let backend_digest = compute_backend_digest(
-        &eth_addr,
-        &link_wallet,
-        &evm_proof.transcript_root,
-        evm_proof.timestamp,
-    );
-    let backend_signature = ctx.signer.sign_claim(&backend_digest).await?;
 
     assemble_registration_proof(
         evm_proof,
@@ -169,7 +180,6 @@ where
         &recv_snippet,
         eth_addr,
         link_wallet,
-        backend_signature,
         &ctx.verifier_contract,
         ctx.platform,
         presentation,
@@ -198,7 +208,7 @@ pub fn pubkey_to_session_address(pubkey_hex: &str) -> Result<[u8; 20]> {
 fn verify<T>(
     prover_result: &ProverResult<T>,
     notary_resp: &NotaryResponse,
-    ctx: &FlowContext<'_>,
+    ctx: &FlowContext,
     provider: &CryptoProvider,
 ) -> Result<(PlatformUser, Attestation, Vec<u8>)>
 where
@@ -460,9 +470,9 @@ pub fn solidity_sig(mut sig: Vec<u8>) -> Vec<u8> {
     sig
 }
 
-/// Assemble the bind-ready [`VerifyResponse`] from a verified proof and a
-/// backend countersignature. Pure — no I/O, no signing — so tests can drive
-/// it with a fake transcript.
+/// Assemble the bind-ready [`VerifyResponse`] from a verified proof. Pure —
+/// no I/O, and nothing to sign — so tests can drive it with a fake
+/// transcript.
 #[allow(clippy::too_many_arguments)]
 pub fn assemble_registration_proof(
     evm_proof: &EvmProof,
@@ -470,7 +480,6 @@ pub fn assemble_registration_proof(
     recv_snippet: &[u8],
     eth_addr: [u8; 20],
     link_wallet: [u8; 20],
-    backend_signature: Vec<u8>,
     verifier_contract: &[u8; 20],
     platform: Platform,
     presentation: String,
@@ -483,9 +492,6 @@ pub fn assemble_registration_proof(
 
     let session_address = format!("0x{}", hex::encode(eth_addr));
     let verifier_address = format!("0x{}", hex::encode(verifier_contract));
-
-    let backend_sig_bytes = solidity_sig(backend_signature);
-    let backend_sig_hex = format!("0x{}", hex::encode(&backend_sig_bytes));
 
     // Merkle proofs for the on-chain FullTlsProof.
     let leaves = &evm_proof.leaves;
@@ -542,8 +548,6 @@ pub fn assemble_registration_proof(
 
     let tls_proof = FullTlsProof {
         notarySignature: solidity_sig(evm_proof.notary_signature.clone()).into(),
-        backendSignature: backend_sig_bytes.into(),
-        userAddress: Address::from(eth_addr),
         walletAddress: Address::from(link_wallet),
         domainHash: FixedBytes::from(domain_hash),
         clientRandom: FixedBytes::from(evm_proof.client_random),
@@ -563,11 +567,6 @@ pub fn assemble_registration_proof(
         handle: platform_user.username.clone(),
         user_id: platform_user.id.clone(),
         tls_proof,
-        backend_sig: BackendSigFields {
-            user_address: session_address.clone(),
-            timestamp: evm_proof.timestamp,
-            signature: backend_sig_hex,
-        },
         domain: evm_proof.domain.clone(),
         endpoint: evm_proof.endpoint.clone(),
         registry_address: verifier_address,

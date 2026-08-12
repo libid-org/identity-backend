@@ -12,8 +12,6 @@ use std::{
 use tokio::sync::RwLock;
 use url::Url;
 
-use libid_signer::ManagedSigner;
-
 use crate::{
     oauth::OAuthCredentials,
     platform::Platform,
@@ -78,11 +76,13 @@ pub struct Runtime {
 }
 
 /// Shared application state.
+///
+/// No signing identity lives here: the service holds no key and signs
+/// nothing. The only secret it handles is the GitHub OAuth client secret,
+/// and the only long-lived trust root in a proof is the notary's key.
 pub struct AppState {
     /// Validated runtime configuration.
     pub runtime: Runtime,
-    /// Backend countersigning identity (hex key or AWS KMS).
-    pub signer: ManagedSigner,
     /// GitHub OAuth credentials.
     pub github_oauth: OAuthCredentials,
     /// Pending OAuth challenges, keyed by challenge hex.

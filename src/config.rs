@@ -7,6 +7,15 @@ use url::Url;
 ///
 /// Every flag has an environment-variable form; the env names are the
 /// deployment contract.
+///
+/// There is deliberately no signing key among them, and no
+/// `BACKEND_SIGNING_KEY`: this service holds no key of its own. It used to
+/// countersign every proof, which looked like a second trust root but never
+/// was one — the backend IS that signer, so a compromised backend simply
+/// signed whichever pairing it liked. See the [`crate::flow`] module docs for
+/// what the second signature did and did not buy. Nothing else here changed:
+/// `NOTARY_ADDRESS`, `CHAIN_ID` and `VERIFIER_CONTRACT_ADDRESS` still describe
+/// the notary digest, which is unaffected.
 #[derive(Debug, Parser)]
 #[command(name = "identity-backend", version, about)]
 pub struct Config {
@@ -39,8 +48,9 @@ pub struct Config {
     #[arg(long, env = "NOTARY_URL", default_value = "tcp://127.0.0.1:7047")]
     pub notary_url: Url,
 
-    /// Ethereum address of the notary. Every proof's notary signature must
-    /// recover to this address or the flow fails before countersigning.
+    /// Ethereum address of the notary — the only trust root in the proof.
+    /// Every proof's notary signature must recover to this address or the
+    /// flow fails before a proof is handed to the client.
     #[arg(long, env = "NOTARY_ADDRESS")]
     pub notary_address: String,
 
@@ -61,13 +71,6 @@ pub struct Config {
     /// domain-separated by `(chainId, verifyingContract)`.
     #[arg(long, env = "VERIFIER_CONTRACT_ADDRESS")]
     pub verifier_contract_address: String,
-
-    /// Backend countersigning key: a hex secp256k1 private key, or
-    /// `kms:<key-id>` naming an AWS KMS key (alias/ARN/UUID) — see
-    /// libid-signer. The verifier contract must trust the corresponding
-    /// address.
-    #[arg(long, env = "BACKEND_SIGNING_KEY")]
-    pub backend_signing_key: String,
 
     /// GitHub OAuth App client ID (read-only app; no GitHub App needed).
     #[arg(long, env = "GH_OAUTH_CLIENT_ID")]

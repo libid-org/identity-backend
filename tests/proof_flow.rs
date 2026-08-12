@@ -1,9 +1,12 @@
 //! Proof-flow tests over a fake transcript: the independent verification
 //! checks and the assembled proof structure, pinned against dyaka's
 //! behavior. The byte-exact digest/Merkle/EIP-191 vectors live with the
-//! libid-rs crates (libid-crypto / libid-attestations / libid-signer carry
-//! dyaka's pinning tests); here we prove the backend wires them together
-//! into a bind-ready proof.
+//! libid-rs crates (libid-crypto / libid-attestations carry dyaka's pinning
+//! tests); here we prove the backend wires them together into a bind-ready
+//! proof.
+//!
+//! Nothing here signs anything: the notary's is the only signature in a
+//! proof, and this service holds no key.
 
 use std::time::SystemTime;
 
@@ -21,10 +24,7 @@ use identity_backend::{
         PlatformUser,
     },
 };
-use libid_attestations::{
-    compute_backend_digest,
-    compute_notary_digest,
-};
+use libid_attestations::compute_notary_digest;
 use libid_crypto::{
     build_merkle_tree,
     double_hash_leaf,
@@ -32,10 +32,8 @@ use libid_crypto::{
     merkle_verify,
     pubkey_to_eth_address,
     pubkey_to_hex,
-    recover_eth_claim,
     sign_eth_claim,
 };
-use libid_signer::SignerSource;
 use libid_transcript::{
     find_json_snippet_range,
     EvmProof,
@@ -45,8 +43,6 @@ use libid_transcript::{
 // Canonical anvil keys. Public test material, not secrets.
 const NOTARY_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const BACKEND_KEY: &str =
-    "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const SESSION_KEY: &str =
     "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 
@@ -222,10 +218,10 @@ fn timestamp_and_handshake_checks() {
     ));
 }
 
-/// Integration-shaped: fake transcript → verification → countersign →
-/// assembled proof, then check the structure the UI would submit on-chain.
-#[tokio::test]
-async fn assembled_proof_structure_is_bind_ready() {
+/// Integration-shaped: fake transcript → verification → assembled proof,
+/// then check the structure the UI would submit on-chain.
+#[test]
+fn assembled_proof_structure_is_bind_ready() {
     let f = fixture();
 
     // The session key from the challenge.
@@ -233,20 +229,6 @@ async fn assembled_proof_structure_is_bind_ready() {
     let pubkey_hex = pubkey_to_hex(session_sk.verifying_key());
     let eth_addr = pubkey_to_session_address(&pubkey_hex).unwrap();
     assert_eq!(eth_addr, pubkey_to_eth_address(session_sk.verifying_key()));
-
-    // Countersign exactly as the flow does.
-    let signer = SignerSource::from_spec(BACKEND_KEY)
-        .unwrap()
-        .build_managed(None)
-        .await
-        .unwrap();
-    let backend_digest = compute_backend_digest(
-        &eth_addr,
-        &LINK_WALLET,
-        &f.evm_proof.transcript_root,
-        f.evm_proof.timestamp,
-    );
-    let backend_signature = signer.sign_claim(&backend_digest).await.unwrap();
 
     let user = PlatformUser {
         platform: Platform::GitHub,
@@ -261,7 +243,6 @@ async fn assembled_proof_structure_is_bind_ready() {
         &f.username_snippet,
         eth_addr,
         LINK_WALLET,
-        backend_signature,
         &VERIFIER,
         Platform::GitHub,
         "cHJlc2VudGF0aW9u".into(),
@@ -281,7 +262,10 @@ async fn assembled_proof_structure_is_bind_ready() {
     assert_eq!(resp.eth_address, format!("0x{}", hex::encode(eth_addr)));
 
     let tls = &proof.tls_proof;
-    assert_eq!(tls.userAddress.into_array(), eth_addr);
+    // No `tls.userAddress`: the session address left the proof with the backend
+    // countersignature that was the only thing covering it. It is still checked,
+    // one assertion above, where it now lives — on the response rather than
+    // inside the proof.
     assert_eq!(tls.walletAddress.into_array(), LINK_WALLET);
     assert_eq!(tls.transcriptRoot.0, f.evm_proof.transcript_root);
     assert_eq!(tls.domainHash.0, libid_crypto::keccak256(b"api.github.com"));
@@ -320,31 +304,6 @@ async fn assembled_proof_structure_is_bind_ready() {
     let notary_sig: &[u8] = tls.notarySignature.as_ref();
     assert!(matches!(notary_sig[64], 27 | 28));
 
-    // The backend countersignature recovers to the backend signer over the
-    // (user, wallet, root, timestamp) digest — byte-compatible with what
-    // the on-chain verifier recomputes.
-    let backend_sig: &[u8] = tls.backendSignature.as_ref();
-    assert_eq!(backend_sig.len(), 65);
-    assert!(matches!(backend_sig[64], 27 | 28));
-    let recovered = recover_eth_claim(backend_sig, &backend_digest).unwrap();
-    assert_eq!(
-        pubkey_to_eth_address(&recovered),
-        signer.address().into_array()
-    );
-
-    // Tampering with the wallet invalidates the digest binding.
-    let other_digest = compute_backend_digest(
-        &eth_addr,
-        &[0u8; 20],
-        &f.evm_proof.transcript_root,
-        f.evm_proof.timestamp,
-    );
-    let recovered = recover_eth_claim(backend_sig, &other_digest).unwrap();
-    assert_ne!(
-        pubkey_to_eth_address(&recovered),
-        signer.address().into_array()
-    );
-
     // The whole response serializes and round-trips.
     let json = serde_json::to_string(&resp).unwrap();
     let back: identity_backend::types::VerifyResponse =
@@ -354,12 +313,24 @@ async fn assembled_proof_structure_is_bind_ready() {
         back.registration_proof.tls_proof.walletAddress,
         tls.walletAddress
     );
+
+    // And it carries no countersignature, in either spelling. The backend
+    // holds no key: re-adding one has to be a deliberate decision, not a
+    // merge accident, and the ABI tuple must keep matching
+    // `GitHubIdentityVerifier.FullTlsProof`.
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let proof_json = &value["registration_proof"];
+    assert!(proof_json.get("backend_sig").is_none(), "{proof_json}");
+    assert!(
+        proof_json["tls_proof"].get("backendSignature").is_none(),
+        "{proof_json}"
+    );
 }
 
 /// A proof missing the id leaf must be refused — the receiver key derives
 /// from the immutable id, and there is no handle-key fallback.
-#[tokio::test]
-async fn missing_id_leaf_is_a_hard_error() {
+#[test]
+fn missing_id_leaf_is_a_hard_error() {
     let mut f = fixture();
     f.evm_proof.leaves.truncate(3); // drop the id leaf
     f.evm_proof.transcript_root = build_merkle_tree(&f.evm_proof.leaves);
@@ -376,7 +347,6 @@ async fn missing_id_leaf_is_a_hard_error() {
         &f.username_snippet,
         [0x01u8; 20],
         LINK_WALLET,
-        vec![0u8; 65],
         &VERIFIER,
         Platform::GitHub,
         String::new(),

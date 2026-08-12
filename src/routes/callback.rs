@@ -220,7 +220,6 @@ async fn run_verification(
         chain_id: state.runtime.chain_id,
         verifier_contract: state.runtime.verifier_contract,
         notary_address: state.runtime.notary_address,
-        signer: &state.signer,
     };
     flow::run(tcp_stream, access_token, pubkey_hex, link_wallet, &ctx).await
 }

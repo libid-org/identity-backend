@@ -172,10 +172,7 @@ pub enum Error {
     /// A libid-crypto primitive failed.
     #[error(transparent)]
     Crypto(#[from] libid_crypto::Error),
-
-    /// Signer construction or signing failed.
-    #[error(transparent)]
-    Signer(#[from] libid_signer::SignerError),
+    // No signing variant: this service holds no key and signs nothing.
 }
 
 /// Result alias for this crate.
