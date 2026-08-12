@@ -1,6 +1,6 @@
 [package]
 name = "identity-backend"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 # Inherited from libid-rs, and it is not arbitrary: the `mpz` MPC dependency
 # (via tlsn) uses `cfg_select!`, unstable before 1.94.
