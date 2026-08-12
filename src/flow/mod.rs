@@ -548,7 +548,6 @@ pub fn assemble_registration_proof(
 
     let tls_proof = FullTlsProof {
         notarySignature: solidity_sig(evm_proof.notary_signature.clone()).into(),
-        userAddress: Address::from(eth_addr),
         walletAddress: Address::from(link_wallet),
         domainHash: FixedBytes::from(domain_hash),
         clientRandom: FixedBytes::from(evm_proof.client_random),

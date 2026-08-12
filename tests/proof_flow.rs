@@ -262,7 +262,10 @@ fn assembled_proof_structure_is_bind_ready() {
     assert_eq!(resp.eth_address, format!("0x{}", hex::encode(eth_addr)));
 
     let tls = &proof.tls_proof;
-    assert_eq!(tls.userAddress.into_array(), eth_addr);
+    // No `tls.userAddress`: the session address left the proof with the backend
+    // countersignature that was the only thing covering it. It is still checked,
+    // one assertion above, where it now lives — on the response rather than
+    // inside the proof.
     assert_eq!(tls.walletAddress.into_array(), LINK_WALLET);
     assert_eq!(tls.transcriptRoot.0, f.evm_proof.transcript_root);
     assert_eq!(tls.domainHash.0, libid_crypto::keccak256(b"api.github.com"));

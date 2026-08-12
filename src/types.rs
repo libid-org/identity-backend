@@ -69,11 +69,15 @@ mod sol_types {
         /// root, plus the Merkle paths for the revealed leaves. Field order
         /// is the ABI — it must stay identical to `FullTlsProof` in
         /// `GitHubIdentityVerifier.sol`, which no longer carries a
-        /// `backendSignature`.
+        /// `backendSignature` OR a `userAddress` — both went with the
+        /// countersignature, `userAddress` because nothing read it once it was
+        /// no longer being signed over. Dropping a field from the head of a
+        /// tuple shifts every offset after it, so an encoder one field out of
+        /// step does not fail loudly: it produces calldata the verifier decodes
+        /// into the wrong values.
         #[derive(Debug, serde::Serialize, serde::Deserialize)]
         struct FullTlsProof {
             bytes notarySignature;
-            address userAddress;
             address walletAddress;
             bytes32 domainHash;
             bytes32 clientRandom;
