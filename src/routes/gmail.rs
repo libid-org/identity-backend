@@ -82,38 +82,10 @@ fn gmail_forward_html(target: &Url) -> String {
 }
 
 fn gmail_callback_target(app_url: &str) -> Result<Url, &'static str> {
-    let mut target = Url::parse(app_url).map_err(|_| "must be an absolute URL")?;
-    // The forwarded document holds Google's id_token in its fragment, so
-    // require TLS: plain http to a routable host lets an on-path attacker
-    // swap the page and read the token. Allow http only for loopback dev
-    // hosts (localhost).
-    match target.scheme() {
-        "https" => {}
-        "http" if is_loopback_host(&target) => {}
-        "http" => {
-            return Err("http APP_URL is only allowed for loopback hosts — use https")
-        }
-        _ => return Err("scheme must be http or https"),
-    }
-    if !target.username().is_empty() || target.password().is_some() {
-        return Err("credentials are not allowed");
-    }
-    target.set_path("/auth/gmail/callback");
-    target.set_query(None);
-    target.set_fragment(None);
-    Ok(target)
-}
-
-/// True when the URL's host is a loopback dev host — `localhost` /
-/// `*.localhost` or a loopback IP (127.0.0.0/8, ::1). Used to permit plain
-/// http only for local development, never a routable origin.
-fn is_loopback_host(url: &Url) -> bool {
-    match url.host() {
-        Some(url::Host::Domain(d)) => d == "localhost" || d.ends_with(".localhost"),
-        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
-        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
-        None => false,
-    }
+    // The forwarded document holds Google's id_token in its fragment, so the
+    // shared helper's https-except-loopback rule is what keeps it off the wire
+    // in cleartext.
+    crate::routes::relay::relay_target(app_url, "/auth/gmail/callback")
 }
 
 #[cfg(test)]

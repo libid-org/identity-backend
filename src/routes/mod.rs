@@ -5,14 +5,19 @@
 //! - `GET  /auth/github/callback`
 //! - `GET  /auth/github/result/{challenge}`
 //! - `GET  /auth/gmail/callback`
+//! - `GET  /zk/x-popup`
 //!
-//! X gets NO backend endpoints: its browser flow talks to the notary
-//! directly.
+//! The last two are pure browser bounces, not part of any proving path: X and
+//! Google are proven client-side and talk to the notary directly. They exist so
+//! a provider's registered redirect URI can be a stable API host instead of
+//! whichever origin serves the UI.
 
 pub mod callback;
 pub mod challenge;
 pub mod gmail;
+mod relay;
 pub mod result;
+pub mod x;
 
 use std::sync::Arc;
 
@@ -44,6 +49,7 @@ pub fn build_router() -> Router<Arc<AppState>> {
             get(result::result_github),
         )
         .route("/auth/gmail/callback", get(gmail::gmail_callback))
+        .route("/zk/x-popup", get(x::x_popup))
 }
 
 /// CORS layer from a list of origin patterns (supports `*.suffix` and

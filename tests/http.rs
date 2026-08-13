@@ -309,6 +309,45 @@ fn pubkey_and_wallet_validation() {
 }
 
 #[tokio::test]
+async fn x_relay_bounces_the_code_to_the_app() {
+    let state = test_state(300, Some("https://wallet.example"));
+    let resp = app(state)
+        .oneshot(
+            Request::get(
+                "/zk/x-popup?code=abc123&state=job7~n&redirect=https://evil.example",
+            )
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(resp.status().is_redirection());
+    // APP_URL substituted, path forced, provider params forwarded, and the
+    // attacker-supplied one dropped rather than carried into the app's URL.
+    let location = resp.headers()["location"].to_str().unwrap();
+    assert!(location.starts_with("https://wallet.example/zk/x-popup?"));
+    assert!(location.contains("code=abc123"));
+    assert!(location.contains("state=job7"));
+    assert!(!location.contains("evil.example"));
+    assert_eq!(resp.headers()["cache-control"], "no-store");
+    assert_eq!(resp.headers()["referrer-policy"], "no-referrer");
+}
+
+#[tokio::test]
+async fn x_relay_requires_app_url() {
+    let state = test_state(300, None);
+    let resp = app(state)
+        .oneshot(
+            Request::get("/zk/x-popup?code=c&state=s")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
 async fn gmail_relay_serves_csp_locked_forwarder() {
     let state = test_state(300, Some("https://wallet.example"));
     let resp = app(state)
