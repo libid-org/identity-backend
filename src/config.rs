@@ -17,7 +17,7 @@ use url::Url;
 /// `NOTARY_ADDRESS`, `CHAIN_ID` and `VERIFIER_CONTRACT_ADDRESS` still describe
 /// the notary digest, which is unaffected.
 #[derive(Debug, Parser)]
-#[command(name = "identity-backend", version, about)]
+#[command(name = "libid-server-rs", version, about)]
 pub struct Config {
     /// Host to bind. Use 0.0.0.0 in containers.
     #[arg(long, env = "HOST", default_value = "127.0.0.1")]

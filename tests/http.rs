@@ -17,7 +17,7 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use identity_backend::{
+use libid_server_rs::{
     platform::Platform,
     routes::{
         self,
@@ -49,7 +49,7 @@ fn test_state(ttl_secs: u64, app_url: Option<&str>) -> Arc<AppState> {
             verifier_contract: [0x42u8; 20],
             challenge_ttl_secs: ttl_secs,
         },
-        github_oauth: identity_backend::oauth::OAuthCredentials {
+        github_oauth: libid_server_rs::oauth::OAuthCredentials {
             client_id: "test-client-id".into(),
             client_secret: "test-client-secret".into(),
             redirect_uri: "http://127.0.0.1:8722/auth/github/callback".into(),

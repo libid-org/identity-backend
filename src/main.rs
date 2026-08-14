@@ -3,7 +3,7 @@
 use clap::Parser;
 use tracing::info;
 
-use identity_backend::{
+use libid_server_rs::{
     build_state,
     config::Config,
     routes,
@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(routes::cors_layer(allowed_origins));
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    info!("identity-backend listening on {}", listener.local_addr()?);
+    info!("libid-server-rs listening on {}", listener.local_addr()?);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async {

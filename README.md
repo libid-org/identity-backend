@@ -1,6 +1,6 @@
-# identity-backend
+# libid-server-rs
 
-A minimal identity backend for on-chain handle claims. It does exactly one
+A minimal libID server for on-chain handle claims. It does exactly one
 job: run the OAuth + MPC-TLS flow that turns "I control this GitHub account"
 into a bind-ready cryptographic proof, and hand that proof back to the UI.
 The UI submits the bind on-chain itself — this server holds no wallets, pays
@@ -128,11 +128,11 @@ docker run --rm -p 8722:8722 \
   -e VERIFIER_CONTRACT_ADDRESS=0x...   # GitHubIdentityVerifier, see above \
   -e GH_OAUTH_CLIENT_ID=... \
   -e GH_OAUTH_CLIENT_SECRET=... \
-  ghcr.io/libid-org/identity-backend:latest
+  ghcr.io/libid-org/libid-server-rs:latest
 ```
 
 Images are published on every GitHub release as
-`ghcr.io/libid-org/identity-backend:<version>` and `:latest`. The image
+`ghcr.io/libid-org/libid-server-rs:<version>` and `:latest`. The image
 listens on `0.0.0.0:8722` and carries a `/health` healthcheck.
 
 ## Building from source

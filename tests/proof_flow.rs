@@ -10,7 +10,7 @@
 
 use std::time::SystemTime;
 
-use identity_backend::{
+use libid_server_rs::{
     error::Error,
     flow::{
         assemble_registration_proof,
@@ -306,7 +306,7 @@ fn assembled_proof_structure_is_bind_ready() {
 
     // The whole response serializes and round-trips.
     let json = serde_json::to_string(&resp).unwrap();
-    let back: identity_backend::types::VerifyResponse =
+    let back: libid_server_rs::types::VerifyResponse =
         serde_json::from_str(&json).unwrap();
     assert_eq!(back.registration_proof.handle, "alice");
     assert_eq!(

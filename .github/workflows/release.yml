@@ -2,8 +2,8 @@ name: Release
 
 # Publishing a GitHub Release tagged `v<version>` runs the full checks and
 # then builds + pushes the container image to
-#   ghcr.io/libid-org/identity-backend:<version>
-#   ghcr.io/libid-org/identity-backend:latest
+#   ghcr.io/libid-org/libid-server-rs:<version>
+#   ghcr.io/libid-org/libid-server-rs:latest
 # using the built-in GITHUB_TOKEN — no long-lived registry credential.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
@@ -23,7 +23,7 @@ env:
   CARGO_INCREMENTAL: 0
   RUST_VERSION: 1.97.1
   NIGHTLY: nightly-2026-08-10
-  IMAGE: ghcr.io/libid-org/identity-backend
+  IMAGE: ghcr.io/libid-org/libid-server-rs
 
 jobs:
   # The same gate as CI: nothing ships from a tree that does not pass the

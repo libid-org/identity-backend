@@ -2,7 +2,7 @@ name: Docker (custom)
 
 # Manual image build from any ref: "Run workflow" → pick the branch/tag and
 # an optional tag suffix. Pushes
-#   ghcr.io/libid-org/identity-backend:custom-<shortsha>[-<suffix>]
+#   ghcr.io/libid-org/libid-server-rs:custom-<shortsha>[-<suffix>]
 # Never touches `latest` or version tags — those come only from release.yml.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
@@ -25,7 +25,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/libid-org/identity-backend
+  IMAGE: ghcr.io/libid-org/libid-server-rs
 
 jobs:
   docker:

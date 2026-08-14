@@ -21,7 +21,7 @@ RUN apt-get update \
         ca-certificates libssl3 curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/target/release/identity-backend /usr/local/bin/identity-backend
+COPY --from=builder /build/target/release/libid-server-rs /usr/local/bin/libid-server-rs
 
 # Bind on all interfaces inside the container; everything else comes from
 # the environment (see README for the full table).
@@ -33,4 +33,4 @@ EXPOSE 8722
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
-ENTRYPOINT ["identity-backend"]
+ENTRYPOINT ["libid-server-rs"]

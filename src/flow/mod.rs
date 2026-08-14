@@ -100,7 +100,7 @@ use crate::{
 
 /// User-Agent sent on the MPC-TLS request (GitHub rejects agent-less
 /// requests).
-const USER_AGENT: &str = concat!("identity-backend/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("libid-server-rs/", env!("CARGO_PKG_VERSION"));
 
 /// Maximum allowed drift between the notary's proof timestamp and this
 /// server's clock, in seconds.

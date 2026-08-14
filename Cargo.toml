@@ -1,13 +1,13 @@
 [package]
-name = "identity-backend"
-version = "0.2.0"
+name = "libid-server-rs"
+version = "0.2.1"
 edition = "2021"
 # Inherited from libid-rs, and it is not arbitrary: the `mpz` MPC dependency
 # (via tlsn) uses `cfg_select!`, unstable before 1.94.
 rust-version = "1.94.1"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/libid-org/identity-backend"
-description = "Minimal identity/handles backend: OAuth handle-claim flow producing bind-ready MPC-TLS proofs. The UI submits the bind on-chain itself."
+repository = "https://github.com/libid-org/libid-server-rs"
+description = "libID server: OAuth handle-claim flow producing bind-ready MPC-TLS proofs. The UI submits the bind on-chain itself."
 publish = false
 
 [dependencies]
