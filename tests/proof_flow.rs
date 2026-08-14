@@ -10,6 +10,16 @@
 
 use std::time::SystemTime;
 
+use libid_attestations::compute_notary_digest;
+use libid_crypto::{
+    build_merkle_tree,
+    double_hash_leaf,
+    hex_to_signing_key,
+    merkle_verify,
+    pubkey_to_eth_address,
+    pubkey_to_hex,
+    sign_eth_claim,
+};
 use libid_server_rs::{
     error::Error,
     flow::{
@@ -23,16 +33,6 @@ use libid_server_rs::{
         Platform,
         PlatformUser,
     },
-};
-use libid_attestations::compute_notary_digest;
-use libid_crypto::{
-    build_merkle_tree,
-    double_hash_leaf,
-    hex_to_signing_key,
-    merkle_verify,
-    pubkey_to_eth_address,
-    pubkey_to_hex,
-    sign_eth_claim,
 };
 use libid_transcript::{
     find_json_snippet_range,
