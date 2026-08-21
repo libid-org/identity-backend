@@ -1,6 +1,6 @@
 [package]
 name = "libid-server-rs"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 # Inherited from libid-rs, and it is not arbitrary: the `mpz` MPC dependency
 # (via tlsn) uses `cfg_select!`, unstable before 1.94.
