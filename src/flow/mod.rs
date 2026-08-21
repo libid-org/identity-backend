@@ -1,9 +1,9 @@
 //! The MPC-TLS proving flow: prover session → notary response → independent
 //! verification → Merkle paths → bind-ready proof.
 //!
-//! Ported from dyaka's `RegistrationFlow`, rebuilt on the libid-rs crates and
-//! stripped of everything on-chain: the output is a bind-ready
-//! [`VerifyResponse`] the UI submits itself.
+//! Ported from the original wallet backend's `RegistrationFlow`, rebuilt on
+//! the libid-rs crates and stripped of everything on-chain: the output is a
+//! bind-ready [`VerifyResponse`] the UI submits itself.
 //!
 //! # The notary is the only trust root
 //!

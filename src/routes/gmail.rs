@@ -11,7 +11,7 @@
 //! 3xx Location re-using the request's fragment): it's spec-mandated but
 //! subtle, and APP_URL is typically a different origin than this callback.
 //!
-//! Ported verbatim from dyaka `server/routes/oidc.rs`.
+//! Ported verbatim from the upstream monorepo's `server/routes/oidc.rs`.
 
 use std::sync::Arc;
 

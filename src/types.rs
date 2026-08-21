@@ -1,20 +1,21 @@
 //! Wire types: challenge request/response and the bind-ready proof bundle.
 //!
-//! The proof shapes still mirror dyaka's field-for-field and use the same
-//! alloy serde encodings, with one deliberate difference: the backend
-//! countersignature is gone, so the payload no longer carries `backend_sig`
-//! and `tls_proof` no longer carries `backendSignature`. That drops one
-//! `bytes` member from the head of the ABI tuple, so a client built for the
-//! old shape does not encode a valid call — it has to drop the field in step
-//! with `GitHubIdentityVerifier`, which no longer reads it.
+//! The proof shapes still mirror the original wallet backend's
+//! field-for-field and use the same alloy serde encodings, with one
+//! deliberate difference: the backend countersignature is gone, so the
+//! payload no longer carries `backend_sig` and `tls_proof` no longer carries
+//! `backendSignature`. That drops one `bytes` member from the head of the
+//! ABI tuple, so a client built for the old shape does not encode a valid
+//! call — it has to drop the field in step with `GitHubIdentityVerifier`,
+//! which no longer reads it.
 //!
 //! End-to-end coverage against real GitHub OAuth + a live notary is out of
-//! scope here; dyaka's `tests/src/e2e/identity_bind.rs` exercises exactly the
-//! three endpoints this server exposes (`/auth/github/challenge`,
-//! `/auth/github/callback` via the browser, `/auth/github/result/{id}`), so
-//! pointing its `backend_url` here still drives the whole flow — but its
-//! proof deserialization has to lose the countersignature fields first, the
-//! same edit its on-chain encoder needs.
+//! scope here; the upstream monorepo's `tests/src/e2e/identity_bind.rs`
+//! exercises exactly the three endpoints this server exposes
+//! (`/auth/github/challenge`, `/auth/github/callback` via the browser,
+//! `/auth/github/result/{id}`), so pointing its `backend_url` here still
+//! drives the whole flow — but its proof deserialization has to lose the
+//! countersignature fields first, the same edit its on-chain encoder needs.
 
 use serde::{
     Deserialize,
@@ -61,7 +62,8 @@ pub struct ChallengeResponse {
 }
 
 // The Solidity struct the verifier contract consumes, kept ABI- and
-// serde-identical to dyaka's `Registry::FullTlsProof` binding.
+// serde-identical to the original wallet backend's `Registry::FullTlsProof`
+// binding.
 #[allow(missing_docs, clippy::too_many_arguments, unused_attributes)]
 mod sol_types {
     alloy_sol_types::sol! {
@@ -116,9 +118,9 @@ pub struct RegistrationProof {
     /// The API endpoint path verified in the TLS proof.
     pub endpoint: String,
     /// The verifier contract address the notary digest is bound to (hex,
-    /// `0x`-prefixed). Named `registry_address` for dyaka wire
-    /// compatibility; for the naming deployment this is the
-    /// `GitHubIdentityVerifier` contract.
+    /// `0x`-prefixed). Named `registry_address` for wire compatibility
+    /// with the original wallet backend; for the naming deployment this
+    /// is the `GitHubIdentityVerifier` contract.
     pub registry_address: String,
     /// Base64-encoded TLSNotary presentation (independently verifiable
     /// off-chain).
@@ -145,7 +147,8 @@ pub struct VerifyResponse {
     /// The full registration proof for client-side submission.
     pub registration_proof: RegistrationProof,
     /// Always `None` here — this backend never deploys or resolves wallets.
-    /// Kept so the payload deserializes into dyaka's `VerifyResponse`.
+    /// Kept so the payload deserializes into the original wallet backend's
+    /// `VerifyResponse`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wallet_address: Option<String>,
 }

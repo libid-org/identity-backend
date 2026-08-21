@@ -65,10 +65,11 @@ pub struct Config {
     /// LOUD WARNING, learned the hard way: this is the address of the
     /// contract that VERIFIES the notary signature on-chain — for the naming
     /// deployment that is `GitHubIdentityVerifier`, NOT `IdentityNames`.
-    /// dyaka called the same value `REGISTRY_CONTRACT_ADDRESS`, which
-    /// misled operators into pointing it at the registry; every bind then
-    /// reverts with a notary-signature failure because the digest is
-    /// domain-separated by `(chainId, verifyingContract)`.
+    /// The predecessor backend called the same value
+    /// `REGISTRY_CONTRACT_ADDRESS`, which misled operators into pointing it
+    /// at the registry; every bind then reverts with a notary-signature
+    /// failure because the digest is domain-separated by
+    /// `(chainId, verifyingContract)`.
     #[arg(long, env = "VERIFIER_CONTRACT_ADDRESS")]
     pub verifier_contract_address: String,
 
