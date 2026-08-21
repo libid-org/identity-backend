@@ -1,9 +1,9 @@
 //! Proof-flow tests over a fake transcript: the independent verification
-//! checks and the assembled proof structure, pinned against dyaka's
-//! behavior. The byte-exact digest/Merkle/EIP-191 vectors live with the
-//! libid-rs crates (libid-crypto / libid-attestations carry dyaka's pinning
-//! tests); here we prove the backend wires them together into a bind-ready
-//! proof.
+//! checks and the assembled proof structure, pinned against the original
+//! wallet backend's behavior. The byte-exact digest/Merkle/EIP-191 vectors
+//! live with the libid-rs crates (libid-crypto / libid-attestations carry
+//! the predecessor's pinning tests); here we prove the backend wires them
+//! together into a bind-ready proof.
 //!
 //! Nothing here signs anything: the notary's is the only signature in a
 //! proof, and this service holds no key.

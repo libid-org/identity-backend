@@ -1,11 +1,11 @@
 //! Platform definitions for OAuth identity verification.
 //!
-//! Only GitHub is served by this backend today, but the config-table shape is
-//! kept from dyaka on purpose: a platform whose proof flow is
-//! server-side-OAuth + MPC-TLS (X, Discord, ...) can be added by DATA — a new
-//! enum variant plus a `PlatformConfig` entry and a parser arm — with no
-//! change to the flow code. X deliberately gets NO entry: its browser talks
-//! to the notary directly and never touches this server.
+//! Only GitHub is served by this backend today, but the config-table shape
+//! is kept from the original wallet backend on purpose: a platform whose
+//! proof flow is server-side-OAuth + MPC-TLS (X, Discord, ...) can be added
+//! by DATA — a new enum variant plus a `PlatformConfig` entry and a parser
+//! arm — with no change to the flow code. X deliberately gets NO entry: its
+//! browser talks to the notary directly and never touches this server.
 
 use serde::{
     Deserialize,

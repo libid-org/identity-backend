@@ -1,7 +1,7 @@
 //! Platform-agnostic OAuth 2.0 integration with PKCE.
 //!
-//! Ported from dyaka's `dyaka-auth/src/oauth.rs`, trimmed to the server-side
-//! code-exchange path this backend uses.
+//! Ported from the upstream monorepo's auth crate (`src/oauth.rs`), trimmed
+//! to the server-side code-exchange path this backend uses.
 
 use base64::{
     engine::general_purpose::URL_SAFE_NO_PAD,
